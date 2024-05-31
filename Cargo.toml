@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    # "bth_codec",
+    "bth_message",
+    "bth_network",
+]
+
+resolver = "2"
+
+[workspace.dependencies]
+anyhow = "1.0.81"
