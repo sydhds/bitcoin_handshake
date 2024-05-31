@@ -1,19 +1,16 @@
+use std::error::Error;
+
 use bytes::BufMut;
 use nom::bytes::complete::take;
-use nom::complete::bool;
-use nom::error::ErrorKind::SeparatedNonEmptyList;
 use nom::number::complete::{le_i32, le_i64, le_u64, u8};
-use nom::AsBytes;
-use std::error::Error;
-// use unsigned_varint::encode::usize;
+
 use crate::network_address::{NetAddress, NetAddressDeserializer, NetAddressSerializer};
 use crate::serialization::{Deserializer, NomError, Serializer};
 use crate::services::Services;
 use crate::variable_length::{VarIntDeserializer, VarIntSerializer};
-// use crate::variable_length::usize_encode;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Version {
+pub struct Version {
     /// Identifies protocol version being used by the node
     version: i32,
     /// bitfield of features to be enabled for this connection
@@ -82,7 +79,7 @@ impl Serializer<Version> for VersionSerializer {
             .serialize(&value.addr_from, &mut buffer)?;
         buffer.put_u64_le(value.nonce);
         self.var_int_serializer
-            .serialize(&value.user_agent.len(), &mut buffer);
+            .serialize(&value.user_agent.len(), &mut buffer)?;
         buffer.put(value.user_agent.as_bytes());
         buffer.put_i32_le(value.start_height);
         buffer.put_u8(u8::from(value.relay));
@@ -163,9 +160,12 @@ impl Deserializer<Version> for VersionDeserializer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bytes::BytesMut;
+
     use std::net::Ipv6Addr;
     use std::str::FromStr;
+
+    use nom::AsBytes;
+    use bytes::BytesMut;
 
     /// From https://en.bitcoin.it/wiki/Protocol_documentation#Network_address
     /// Modified: recipient address info & Sender address info

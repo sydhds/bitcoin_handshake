@@ -1,6 +1,7 @@
-use anyhow::anyhow;
 use std::error::Error;
-use tokio_util::bytes::{Buf, BufMut, BytesMut};
+
+use bytes::Buf;
+use tokio_util::bytes::BytesMut;
 use tokio_util::codec::{Decoder, Encoder};
 
 use bth_message::message::{Message, MessageDeserializer, MessageRaw, MessageSerializer};
@@ -23,7 +24,6 @@ impl Encoder<Message> for MessageEncoder {
 
     fn encode(&mut self, item: Message, dst: &mut BytesMut) -> Result<(), Self::Error> {
         self.message_serializer.serialize(&item, dst)?;
-        // .map_err(|e| anyhow!(e));
         Ok(())
     }
 }
@@ -61,10 +61,6 @@ impl Decoder for MessageDecoder {
         let payload_length = u32::from_le_bytes(length_bytes) as usize;
 
         if payload_length > MAX_PAYLOAD_SIZE {
-            // return Err(std::io::Error::new(
-            //     std::io::ErrorKind::InvalidData,
-            //
-            // ));
             return Err(format!("Frame of payload length {} is too large.", payload_length).into());
         }
 

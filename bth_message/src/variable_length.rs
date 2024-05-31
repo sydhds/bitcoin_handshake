@@ -71,15 +71,15 @@ impl Deserializer<usize> for VarIntDeserializer {
 
         match value {
             v if v < 0xFD => Ok((content, usize::from(value))),
-            v if v == 0xFD => {
+            0xFD => {
                 let (content, value_) = le_u16::<_, NomError>(content)?;
                 Ok((content, usize::from(value_)))
             }
-            v if v == 0xFE => {
+            0xFE => {
                 let (content, value_) = le_u32::<_, NomError>(content)?;
                 Ok((content, usize::try_from(value_)?))
             }
-            v if v == 0xFF => {
+            0xFF => {
                 let (content, value_) = le_u64::<_, NomError>(content)?;
                 Ok((content, usize::try_from(value_)?))
             }

@@ -4,7 +4,6 @@ use std::net::{IpAddr, Ipv6Addr};
 use bytes::BufMut;
 use nom::bytes::complete::take;
 use nom::number::complete::{be_u16, le_i64};
-use nom::IResult;
 
 use crate::serialization::{Deserializer, Serializer};
 use crate::services::Services;
@@ -90,7 +89,7 @@ impl Deserializer<NetAddress> for NetAddressDeserializer {
         let (content, ip_) = take::<usize, &[u8], nom::error::Error<&[u8]>>(16usize)(content)?;
 
         let ipv6_: &[u8; 16] = ip_.try_into().unwrap();
-        let ipv6 = Ipv6Addr::from(ipv6_.clone());
+        let ipv6 = Ipv6Addr::from(*ipv6_);
         let ip = IpAddr::from(ipv6);
 
         let (content, port) = be_u16::<&[u8], nom::error::Error<&[u8]>>(content)?;

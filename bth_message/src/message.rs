@@ -1,31 +1,28 @@
-use crate::network_address::NetAddress;
 use crate::serialization::{Deserializer, NomError, Serializer};
 use bytes::{BufMut, BytesMut};
 use nom::bytes::complete::take;
-use nom::number::complete::{le_i32, le_u32};
+use nom::number::complete::le_u32;
 use nom::AsBytes;
-use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use sha2::{Digest, Sha256};
 use std::error::Error;
-// use bytes::buf::BufMut;
 
 use crate::version::{Version, VersionDeserializer, VersionSerializer};
 
-// #[derive(FromPrimitive, IntoPrimitive, Clone, Copy, PartialEq, Debug)]
 #[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, TryFromPrimitive)]
 #[repr(u32)]
-enum MessageMagic {
-    MAIN = 0xD9B4BEF9,
-    TESTNET = 0xDAB5BFFA,
-    TESTNET3 = 0x0709110B,
-    SIGNET = 0x40CF030A,
-    NAMECOIN = 0xFEB4BEF9,
+pub enum MessageMagic {
+    Main = 0xD9B4BEF9,
+    Testnet = 0xDAB5BFFA,
+    Testnet3 = 0x0709110B,
+    Signet = 0x40CF030A,
+    Namecoin = 0xFEB4BEF9,
 }
 
 #[derive(Clone, PartialEq, Debug)]
-enum MessageCommand {
-    VERACK,
-    VERSION,
+pub enum MessageCommand {
+    Verack,
+    Version,
     __Nonexhaustive,
 }
 
@@ -36,8 +33,8 @@ const COMMAND_OTHER: [u8; 12] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 impl From<&MessageCommand> for [u8; 12] {
     fn from(value: &MessageCommand) -> Self {
         match value {
-            MessageCommand::VERACK => COMMAND_VERACK,
-            MessageCommand::VERSION => COMMAND_VERSION,
+            MessageCommand::Verack => COMMAND_VERACK,
+            MessageCommand::Version => COMMAND_VERSION,
             MessageCommand::__Nonexhaustive => COMMAND_OTHER,
         }
     }
@@ -48,8 +45,8 @@ impl TryFrom<&[u8; 12]> for MessageCommand {
 
     fn try_from(value: &[u8; 12]) -> Result<Self, Self::Error> {
         Ok(match value {
-            v if *v == COMMAND_VERACK => MessageCommand::VERACK,
-            v if *v == COMMAND_VERSION => MessageCommand::VERSION,
+            v if *v == COMMAND_VERACK => MessageCommand::Verack,
+            v if *v == COMMAND_VERSION => MessageCommand::Version,
             _ => MessageCommand::__Nonexhaustive,
         })
     }
@@ -104,14 +101,20 @@ impl MessagePayloadDeserializer {
     }
 }
 
+impl Default for MessagePayloadDeserializer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Deserializer<MessagePayload> for MessagePayloadDeserializer {
     fn deserialize<'a>(
         &self,
         buffer: &'a [u8],
     ) -> Result<(&'a [u8], MessagePayload), Box<dyn Error + 'a>> {
         match self.command.as_ref().ok_or("command not set")? {
-            MessageCommand::VERACK => Ok((buffer, MessagePayload::Verack)),
-            MessageCommand::VERSION => {
+            MessageCommand::Verack => Ok((buffer, MessagePayload::Verack)),
+            MessageCommand::Version => {
                 let (content, version) = self.version_deserializer.deserialize(buffer)?;
                 Ok((content, MessagePayload::Version(version)))
             }
@@ -152,6 +155,7 @@ pub struct Message {
 }
 
 impl Message {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         // let command = "verack"
         //     .as_bytes()
@@ -160,7 +164,7 @@ impl Message {
         //     .chain(std::iter::repeat(0))
         //     .take(12)
         //     .collect::<Vec<u8>>();
-        let command = MessageCommand::VERACK;
+        let command = MessageCommand::Verack;
         // let payload: Vec<u8> = vec![];
         let payload = MessagePayload::Verack;
 
@@ -177,7 +181,7 @@ impl Message {
         // println!("checksum: {:?}", checksum);
 
         Self {
-            magic: MessageMagic::MAIN,
+            magic: MessageMagic::Main,
             command,
             // length: None,
             // checksum: None,
@@ -269,7 +273,7 @@ impl TryFrom<(MessageRaw, MessagePayloadDeserializer)> for Message {
         let message = Self {
             magic: value.magic,
             command: value.command,
-            payload: payload,
+            payload,
         };
 
         Ok(message)
@@ -285,6 +289,12 @@ impl MessageSerializer {
         Self {
             version_serializer: VersionSerializer::new(),
         }
+    }
+}
+
+impl Default for MessageSerializer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -321,6 +331,12 @@ impl MessageDeserializer {
     }
 }
 
+impl Default for MessageDeserializer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Deserializer<MessageRaw> for MessageDeserializer {
     fn deserialize<'a>(
         &self,
@@ -339,7 +355,7 @@ impl Deserializer<MessageRaw> for MessageDeserializer {
         // TODO limit length?
         let (content, payload) = take::<_, _, NomError>(length as usize)(content)?;
 
-        if command == MessageCommand::VERACK && !payload.is_empty() {
+        if command == MessageCommand::Verack && !payload.is_empty() {
             return Err("Command verack but payload is not empty".into());
         }
 
@@ -367,7 +383,7 @@ mod tests {
 
     #[test]
     fn test_message_command() {
-        let cmd = MessageCommand::VERACK;
+        let cmd = MessageCommand::Verack;
         let cmd_array: [u8; 12] = (&cmd).into();
         assert_eq!(cmd_array, EXPECTED_COMMAND_VERACK);
     }
