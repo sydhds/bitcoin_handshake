@@ -37,10 +37,9 @@ pub(crate) struct VarIntSerializer {}
 
 impl Serializer<usize> for VarIntSerializer {
     fn serialize<B: BufMut>(&self, value: &usize, mut buffer: B) -> Result<(), Box<dyn Error>> {
-
         // From https://en.bitcoin.it/wiki/Protocol_documentation#Variable_length_string
         match value {
-            v if *v < 0xFD => { buffer.put_u8(*v as u8) },
+            v if *v < 0xFD => buffer.put_u8(*v as u8),
             v if *v <= 0xFFFF => {
                 buffer.put_u8(0xFD);
                 buffer.put_u16_le(*v as u16);
@@ -68,42 +67,34 @@ pub(crate) struct VarIntDeserializer {}
 
 impl Deserializer<usize> for VarIntDeserializer {
     fn deserialize<'a>(&self, buffer: &'a [u8]) -> Result<(&'a [u8], usize), Box<dyn Error + 'a>> {
-        
         let (content, value) = u8::<_, NomError>(buffer)?;
-        
+
         match value {
-            v if v < 0xFD => {
-                Ok((content, usize::from(value)))
-            },
+            v if v < 0xFD => Ok((content, usize::from(value))),
             v if v == 0xFD => {
                 let (content, value_) = le_u16::<_, NomError>(content)?;
                 Ok((content, usize::from(value_)))
-            },
+            }
             v if v == 0xFE => {
                 let (content, value_) = le_u32::<_, NomError>(content)?;
                 Ok((content, usize::try_from(value_)?))
-            },
+            }
             v if v == 0xFF => {
                 let (content, value_) = le_u64::<_, NomError>(content)?;
                 Ok((content, usize::try_from(value_)?))
-            },
-            _ => {
-                Err("Invalid var int encoding".into())
             }
+            _ => Err("Invalid var int encoding".into()),
         }
-        
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use bytes::BytesMut;
     use super::*;
+    use bytes::BytesMut;
 
     #[test]
     fn test_encode() {
-
         // let res = usize_encode(0);
         // assert_eq!(res, vec![0x0]);
 
@@ -128,7 +119,4 @@ mod tests {
         // let res = usize_encode(4294967295 + 1);
         // assert_eq!(res, vec![0xFF, 0, 0, 0, 0, 1, 0, 0, 0]);
     }
-
-
-
 }

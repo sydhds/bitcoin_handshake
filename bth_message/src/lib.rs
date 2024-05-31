@@ -1,6 +1,6 @@
 pub mod message;
-mod version;
 mod network_address;
+pub mod serialization;
 mod services;
 mod variable_length;
-pub mod serialization;
+mod version;

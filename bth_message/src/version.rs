@@ -1,10 +1,10 @@
-use std::error::Error;
 use bytes::BufMut;
-use nom::AsBytes;
 use nom::bytes::complete::take;
 use nom::complete::bool;
 use nom::error::ErrorKind::SeparatedNonEmptyList;
 use nom::number::complete::{le_i32, le_i64, le_u64, u8};
+use nom::AsBytes;
+use std::error::Error;
 // use unsigned_varint::encode::usize;
 use crate::network_address::{NetAddress, NetAddressDeserializer, NetAddressSerializer};
 use crate::serialization::{Deserializer, NomError, Serializer};
@@ -66,21 +66,23 @@ impl VersionSerializer {
     pub fn new() -> Self {
         Self {
             addr_serializer: NetAddressSerializer {},
-            var_int_serializer: VarIntSerializer {}
+            var_int_serializer: VarIntSerializer {},
         }
     }
 }
 
 impl Serializer<Version> for VersionSerializer {
     fn serialize<B: BufMut>(&self, value: &Version, mut buffer: B) -> Result<(), Box<dyn Error>> {
-        
         buffer.put_i32_le(value.version);
         buffer.put_i64_le(value.services.bits());
         buffer.put_i64_le(value.timestamp);
-        self.addr_serializer.serialize(&value.addr_recv, &mut buffer)?;
-        self.addr_serializer.serialize(&value.addr_from, &mut buffer)?;
+        self.addr_serializer
+            .serialize(&value.addr_recv, &mut buffer)?;
+        self.addr_serializer
+            .serialize(&value.addr_from, &mut buffer)?;
         buffer.put_u64_le(value.nonce);
-        self.var_int_serializer.serialize(&value.user_agent.len(), &mut buffer);
+        self.var_int_serializer
+            .serialize(&value.user_agent.len(), &mut buffer);
         buffer.put(value.user_agent.as_bytes());
         buffer.put_i32_le(value.start_height);
         buffer.put_u8(u8::from(value.relay));
@@ -91,9 +93,9 @@ impl Serializer<Version> for VersionSerializer {
 
     //     let size = 4 + 8 + 8 + 1 + 8 + 4 + 8;
     //     if let (min_size, Some(max_size)) = NetAddressSerializer::size_hint(value.) {
-    //         
-    //         
-    //         
+    //
+    //
+    //
     //     } else {
     //         (size, None)
     //     }
@@ -116,31 +118,32 @@ impl VersionDeserializer {
 }
 
 impl Deserializer<Version> for VersionDeserializer {
-    fn deserialize<'a>(&self, buffer: &'a [u8]) -> Result<(&'a [u8], Version), Box<dyn Error + 'a>> {
-        
+    fn deserialize<'a>(
+        &self,
+        buffer: &'a [u8],
+    ) -> Result<(&'a [u8], Version), Box<dyn Error + 'a>> {
         let (content, version) = le_i32::<_, NomError>(buffer)?;
         let (content, services_) = le_i64::<&[u8], NomError>(content)?;
-        let services = Services::from_bits(services_)
-            .ok_or("Unknown services")?;
+        let services = Services::from_bits(services_).ok_or("Unknown services")?;
         let (content, ts) = le_i64::<&[u8], NomError>(content)?;
 
         let (content, addr_recv) = self.net_address_deserializer.deserialize(content)?;
         let (content, addr_from) = self.net_address_deserializer.deserialize(content)?;
-        
+
         let (content, nonce) = le_u64::<&[u8], NomError>(content)?;
-        
+
         let (content, user_agent_len) = self.var_int_deserializer.deserialize(content)?;
         let (content, user_agent_) = take::<_, &[u8], NomError>(user_agent_len)(content)?;
-        
+
         let (content, start_height) = le_i32::<_, NomError>(content)?;
         let (content, relay_) = u8::<_, NomError>(content)?;
-        
+
         let relay = match relay_ {
             0 => false,
             1 => true,
             _ => return Err("Unable to convert relay value to bool".into()),
         };
-        
+
         let version = Version {
             version,
             services,
@@ -152,30 +155,35 @@ impl Deserializer<Version> for VersionDeserializer {
             start_height,
             relay,
         };
-        
+
         Ok((content, version))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use bytes::BytesMut;
     use std::net::Ipv6Addr;
     use std::str::FromStr;
-    use bytes::BytesMut;
-    use super::*;
 
     /// From https://en.bitcoin.it/wiki/Protocol_documentation#Network_address
     /// Modified: recipient address info & Sender address info
     /// Added: relay
     const EXPECTED: [u8; 101] = [
         0x62, 0xEA, 0x00, 0x00, // - 60002 (protocol version 60002)
-        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // - 1 (NODE_NETWORK services)
-        0x11, 0xB2, 0xD0, 0x50, 0x00, 0x00, 0x00, 0x00,  // - Tue Dec 18 10:12:33 PST 2012
-        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 00, 00, 00, 00, 00, 00, 0xFF, 0xFF, 0x0A, 00, 00, 01, 00, 00, // - Recipient address info - see Network Address
-        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 00, 00, 00, 00, 00, 00, 0xFF, 0xFF, 0x0A, 00, 00, 02, 00, 00, // - Sender address info - see Network Address
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // - 1 (NODE_NETWORK services)
+        0x11, 0xB2, 0xD0, 0x50, 0x00, 0x00, 0x00, 0x00, // - Tue Dec 18 10:12:33 PST 2012
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 00, 00, 00, 00, 00,
+        00, 0xFF, 0xFF, 0x0A, 00, 00, 01, 00,
+        00, // - Recipient address info - see Network Address
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 00, 00, 00, 00, 00,
+        00, 0xFF, 0xFF, 0x0A, 00, 00, 02, 00,
+        00, // - Sender address info - see Network Address
         0x3B, 0x2E, 0xB3, 0x5D, 0x8C, 0xE6, 0x17, 0x65, // - Node ID
-        0x0F, 0x2F, 0x53, 0x61, 0x74, 0x6F, 0x73, 0x68, 0x69, 0x3A, 0x30, 0x2E, 0x37, 0x2E, 0x32, 0x2F, // - "/Satoshi:0.7.2/" sub-version string (string is 15 bytes long)
-        0xC0, 0x3E, 0x03, 0x00,  // - Last block sending node has is block #212672
+        0x0F, 0x2F, 0x53, 0x61, 0x74, 0x6F, 0x73, 0x68, 0x69, 0x3A, 0x30, 0x2E, 0x37, 0x2E, 0x32,
+        0x2F, // - "/Satoshi:0.7.2/" sub-version string (string is 15 bytes long)
+        0xC0, 0x3E, 0x03, 0x00, // - Last block sending node has is block #212672
         0x00, // - relay
     ];
 
@@ -186,7 +194,7 @@ mod tests {
             ip: Ipv6Addr::from_str("::ffff:a00:1").unwrap().into(),
             port: 0,
         };
-        
+
         let net_addr_f = NetAddress {
             services: Services::NODE_NETWORK,
             ip: Ipv6Addr::from_str("::ffff:a00:2").unwrap().into(),
@@ -212,7 +220,7 @@ mod tests {
         let mut buffer = BytesMut::new();
         ser.serialize(&version, &mut buffer).unwrap();
         assert_eq!(buffer.as_bytes(), EXPECTED);
-        
+
         let der = VersionDeserializer {
             net_address_deserializer: NetAddressDeserializer {},
             var_int_deserializer: VarIntDeserializer {},
@@ -222,7 +230,3 @@ mod tests {
         assert_eq!(version_d, version);
     }
 }
-
-
-
-

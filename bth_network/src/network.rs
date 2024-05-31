@@ -2,16 +2,15 @@ use anyhow::anyhow;
 // use bytes::Bytes;
 use futures::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_util::codec::{FramedWrite, FramedRead};
+use tokio_util::codec::{FramedRead, FramedWrite};
 
-use bth_message::message::{Message, MessageRaw};
 use crate::codec::{MessageDecoder, MessageEncoder};
-
+use bth_message::message::{Message, MessageRaw};
 
 /// Receive a Message from network
 pub async fn recv_message<R>(reader: &mut R) -> anyhow::Result<MessageRaw>
-    where
-        R: AsyncRead + Send + Unpin + 'static,
+where
+    R: AsyncRead + Send + Unpin + 'static,
 {
     // let codec = LengthDelimitedCodec::new();
     let codec = MessageDecoder::new();
@@ -25,8 +24,8 @@ pub async fn recv_message<R>(reader: &mut R) -> anyhow::Result<MessageRaw>
 
 /// Send a Message through the network
 pub async fn send_message<W>(writer: &mut W, msg: Message) -> anyhow::Result<()>
-    where
-        W: AsyncWrite + Send + Unpin + 'static,
+where
+    W: AsyncWrite + Send + Unpin + 'static,
 {
     // let to_send = bson::to_vec(&msg)?;
     // let codec = LengthDelimitedCodec::new();

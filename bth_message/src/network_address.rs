@@ -2,14 +2,16 @@ use std::error::Error;
 use std::net::{IpAddr, Ipv6Addr};
 
 use bytes::BufMut;
-use nom::IResult;
+use nom::bytes::complete::take;
 use nom::number::complete::{be_u16, le_i64};
-use nom::bytes::complete::{take};
+use nom::IResult;
 
 use crate::serialization::{Deserializer, Serializer};
 use crate::services::Services;
 
-const IPV4_MAPPED_IPV6_PADDING: [u8; 12] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF];
+const IPV4_MAPPED_IPV6_PADDING: [u8; 12] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF,
+];
 
 /// From https://en.bitcoin.it/wiki/Protocol_documentation#Network_address
 #[derive(Debug, Clone, PartialEq)]
@@ -50,21 +52,23 @@ impl NetAddress {
 pub struct NetAddressSerializer {}
 
 impl Serializer<NetAddress> for NetAddressSerializer {
-    fn serialize<B: BufMut>(&self, value: &NetAddress, mut buffer: B) -> Result<(), Box<dyn Error>> {
+    fn serialize<B: BufMut>(
+        &self,
+        value: &NetAddress,
+        mut buffer: B,
+    ) -> Result<(), Box<dyn Error>> {
         buffer.put_i64_le(value.services.bits());
         match value.ip {
             IpAddr::V4(ipv4) => {
                 buffer.put(IPV4_MAPPED_IPV6_PADDING.as_slice());
                 buffer.put(ipv4.octets().as_slice());
             }
-            IpAddr::V6(ipv6) => {
-                buffer.put(ipv6.octets().as_slice())
-            }
+            IpAddr::V6(ipv6) => buffer.put(ipv6.octets().as_slice()),
         }
         buffer.put_u16(value.port);
         Ok(())
     }
-    
+
     // fn size_hint(_value: &NetAddress) -> (usize, Option<usize>) {
     //     let size = 8 + 16 + 2; // i64 services + ip + u16 port
     //     (size, Some(size))
@@ -72,50 +76,47 @@ impl Serializer<NetAddress> for NetAddressSerializer {
 }
 
 #[derive(Clone)]
-pub struct NetAddressDeserializer {
-}
+pub struct NetAddressDeserializer {}
 
 impl Deserializer<NetAddress> for NetAddressDeserializer {
-    fn deserialize<'a>(&self, buffer: &'a [u8]) -> Result<(&'a [u8], NetAddress), Box<dyn Error + 'a>> {
-        
+    fn deserialize<'a>(
+        &self,
+        buffer: &'a [u8],
+    ) -> Result<(&'a [u8], NetAddress), Box<dyn Error + 'a>> {
         let (content, services_) = le_i64::<&[u8], nom::error::Error<&[u8]>>(buffer)?;
         // let (content, services_) = take_services(buffer)?;
-        let services = Services::from_bits(services_)
-            .ok_or("Unknown services")?;
-        
+        let services = Services::from_bits(services_).ok_or("Unknown services")?;
+
         let (content, ip_) = take::<usize, &[u8], nom::error::Error<&[u8]>>(16usize)(content)?;
-        
+
         let ipv6_: &[u8; 16] = ip_.try_into().unwrap();
         let ipv6 = Ipv6Addr::from(ipv6_.clone());
         let ip = IpAddr::from(ipv6);
-        
+
         let (content, port) = be_u16::<&[u8], nom::error::Error<&[u8]>>(content)?;
-        
-        Ok((content, NetAddress {
-            services,
-            ip,
-            port,
-        }))
+
+        Ok((content, NetAddress { services, ip, port }))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use bytes::BytesMut;
     use std::net::{Ipv4Addr, Ipv6Addr};
     use std::str::FromStr;
-    use bytes::BytesMut;
-    use super::*;
 
     /// From https://en.bitcoin.it/wiki/Protocol_documentation#Network_address
     const EXPECTED: [u8; 26] = [
-        01, 00, 00, 00, 00, 00, 00, 00,  // - 1 (NODE_NETWORK: see services listed under version command)
-        00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 0xFF, 0xFF, 0x0A, 00, 00, 01, // - IPv6: ::ffff:a00:1 or IPv4: 10.0.0.1
-        0x20, 0x8D // - Port 8333
+        01, 00, 00, 00, 00, 00, 00,
+        00, // - 1 (NODE_NETWORK: see services listed under version command)
+        00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 0xFF, 0xFF, 0x0A, 00, 00,
+        01, // - IPv6: ::ffff:a00:1 or IPv4: 10.0.0.1
+        0x20, 0x8D, // - Port 8333
     ];
 
     #[test]
     fn test_serialize_ipv6() {
-
         let net_addr_1 = NetAddress {
             services: Services::NODE_NETWORK,
             ip: Ipv6Addr::from_str("::ffff:a00:1").unwrap().into(),
@@ -126,7 +127,7 @@ mod tests {
         let mut buffer = BytesMut::new();
         ser.serialize(&net_addr_1, &mut buffer).unwrap();
         assert_eq!(buffer.as_ref(), EXPECTED);
-    
+
         let der = NetAddressDeserializer {};
         let (content, net_addr_d) = der.deserialize(EXPECTED.as_slice()).unwrap();
         assert!(content.is_empty());
@@ -135,7 +136,6 @@ mod tests {
 
     #[test]
     fn test_serialize_ipv4() {
-
         let net_addr_1 = NetAddress {
             services: Services::NODE_NETWORK,
             ip: Ipv4Addr::from_str("10.0.0.1").unwrap().into(),

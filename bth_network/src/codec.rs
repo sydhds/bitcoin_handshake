@@ -1,7 +1,7 @@
-use std::error::Error;
 use anyhow::anyhow;
+use std::error::Error;
 use tokio_util::bytes::{Buf, BufMut, BytesMut};
-use tokio_util::codec::{Encoder, Decoder};
+use tokio_util::codec::{Decoder, Encoder};
 
 use bth_message::message::{Message, MessageDeserializer, MessageRaw, MessageSerializer};
 use bth_message::serialization::{Deserializer, Serializer};
@@ -23,13 +23,13 @@ impl Encoder<Message> for MessageEncoder {
 
     fn encode(&mut self, item: Message, dst: &mut BytesMut) -> Result<(), Self::Error> {
         self.message_serializer.serialize(&item, dst)?;
-            // .map_err(|e| anyhow!(e));
+        // .map_err(|e| anyhow!(e));
         Ok(())
     }
 }
 
 pub struct MessageDecoder {
-    message_raw_deserializer: MessageDeserializer
+    message_raw_deserializer: MessageDeserializer,
 }
 
 impl MessageDecoder {
@@ -43,12 +43,10 @@ impl MessageDecoder {
 const MAX_PAYLOAD_SIZE: usize = 8 * 1024 * 1024;
 
 impl Decoder for MessageDecoder {
-
     type Item = MessageRaw;
     type Error = Box<dyn Error>;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-
         // Need magic (4 bytes) + command (12 bytes) + len (4 bytes)
         let index_start_length = 4 + 12;
         let index_end_length = index_start_length + 4;
@@ -67,14 +65,12 @@ impl Decoder for MessageDecoder {
             //     std::io::ErrorKind::InvalidData,
             //
             // ));
-            return Err(
-                format!("Frame of payload length {} is too large.", payload_length).into()
-            )
+            return Err(format!("Frame of payload length {} is too large.", payload_length).into());
         }
 
         // let expected_length = 4 + 12 + 4 + 4 + payload_length;
         let expected_length = index_end_length + 4 + payload_length;
-        
+
         if src.len() < expected_length {
             src.reserve(expected_length - src.len());
             return Ok(None);
@@ -84,7 +80,8 @@ impl Decoder for MessageDecoder {
         src.advance(expected_length);
 
         let (_content, message_raw) = self
-            .message_raw_deserializer.deserialize(data.as_ref())
+            .message_raw_deserializer
+            .deserialize(data.as_ref())
             .map_err(|e| e.to_string())?;
 
         Ok(Some(message_raw))
@@ -95,12 +92,11 @@ impl Decoder for MessageDecoder {
 mod tests {
     use super::*;
 
-    use std::error::Error;
     use bth_message::message::MessagePayloadDeserializer;
+    use std::error::Error;
 
     #[test]
     fn test_verack_encode_then_decode() -> Result<(), Box<dyn Error>> {
-
         let message = Message::new();
         let msg_original = message.clone();
         // encode
@@ -115,7 +111,7 @@ mod tests {
         let der2 = MessagePayloadDeserializer::new();
         let message_decoded = Message::try_from((message_raw_decoded, der2)).unwrap();
         assert_eq!(msg_original, message_decoded);
-        
+
         Ok(())
     }
 }
