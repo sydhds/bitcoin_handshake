@@ -6,8 +6,7 @@ edition = "2021"
 [dependencies]
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-bytes = "*"
 anyhow = { workspace = true }
+rand = { workspace = true }
 futures = "0.3.30"
 bth_message = { path = "../bth_message" }
-rand = "0.9.0-alpha.1"

@@ -1,7 +1,6 @@
 use std::error::Error;
 
-use bytes::Buf;
-use tokio_util::bytes::BytesMut;
+use tokio_util::bytes::{Buf, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
 
 use bth_message::message::{Message, MessageDeserializer, MessageRaw, MessageSerializer};
@@ -91,8 +90,9 @@ impl Decoder for MessageDecoder {
 mod tests {
     use super::*;
 
-    use bth_message::message::{MessageMagic, MessagePayload, MessagePayloadDeserializer};
     use std::error::Error;
+    
+    use bth_message::message::{MessageMagic, MessagePayload, MessagePayloadDeserializer};
 
     #[test]
     fn test_verack_encode_then_decode() -> Result<(), Box<dyn Error>> {

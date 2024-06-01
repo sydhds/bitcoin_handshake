@@ -109,7 +109,6 @@ dependencies = [
  "anyhow",
  "bth_message",
  "bth_network",
- "bytes",
  "clap",
  "env_logger",
  "log",
@@ -150,7 +149,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bth_message",
- "bytes",
  "futures",
  "rand",
  "tokio",
