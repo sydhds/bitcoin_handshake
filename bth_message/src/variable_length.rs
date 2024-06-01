@@ -37,7 +37,7 @@ pub(crate) struct VarIntSerializer {}
 
 impl Serializer<usize> for VarIntSerializer {
     fn serialize<B: BufMut>(&self, value: &usize, mut buffer: B) -> Result<(), Box<dyn Error>> {
-        // From https://en.bitcoin.it/wiki/Protocol_documentation#Variable_length_string
+        // From <https://en.bitcoin.it/wiki/Protocol_documentation#Variable_length_string>
         match value {
             v if *v < 0xFD => buffer.put_u8(*v as u8),
             v if *v <= 0xFFFF => {

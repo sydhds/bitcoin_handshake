@@ -1,11 +1,17 @@
+use std::net::{IpAddr, SocketAddr};
+use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::anyhow;
 // use bytes::Bytes;
-use futures::{SinkExt, StreamExt};
-use tokio::io::{AsyncRead, AsyncWrite};
+use futures::{Sink, SinkExt, Stream, StreamExt};
+use tokio::io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf};
+// use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf, ReadHalf, WriteHalf};
+use tokio::net::TcpStream;
+use tokio::try_join;
 use tokio_util::codec::{FramedRead, FramedWrite};
 
 use crate::codec::{MessageDecoder, MessageEncoder};
-use bth_message::message::{Message, MessageRaw};
+use bth_message::message::{Message, MessageMagic, MessagePayload, MessageRaw};
+use bth_message::version::Version;
 
 /// Receive a Message from network
 pub async fn recv_message<R>(reader: &mut R) -> anyhow::Result<MessageRaw>
@@ -14,6 +20,19 @@ where
 {
     let codec = MessageDecoder::new();
     let mut fr = FramedRead::new(reader, codec);
+    if let Ok(msg_raw) = fr.next().await.ok_or(anyhow!("Cannot read frame"))? {
+        return Ok(msg_raw);
+    }
+
+    Err(anyhow!("Unable to recv msg"))
+}
+
+pub async fn recv_message2<R>(fr: &mut FramedRead<R, MessageDecoder>) -> anyhow::Result<MessageRaw>
+    where
+        R: AsyncRead + Send + Unpin + 'static,
+{
+    // let codec = MessageDecoder::new();
+    // let mut fr = FramedRead::new(reader, codec);
     if let Ok(msg_raw) = fr.next().await.ok_or(anyhow!("Cannot read frame"))? {
         return Ok(msg_raw);
     }
@@ -31,6 +50,89 @@ where
     fw.send(msg).await.map_err(|e| anyhow!(e.to_string()))?;
     Ok(())
 }
+
+pub async fn send_message2<W>(fw: &mut FramedWrite<W, MessageEncoder>, msg: Message) -> anyhow::Result<()>
+    where
+        W: AsyncWrite + Send + Unpin + 'static,
+{
+    fw.send(msg).await.map_err(|e| anyhow!(e.to_string()))?;
+    Ok(())
+}
+
+/*
+pub async fn send_message3(fw: impl Sink<Message, Error=anyhow::Error>, msg: Message) -> anyhow::Result<()> {
+    fw
+        .send(msg)
+        .await
+        .map_err(|e| anyhow!(e.to_string()))?;
+    Ok(())
+}
+*/
+
+pub struct BitcoinNode
+{
+    fr: FramedRead<ReadHalf<TcpStream>, MessageDecoder>,
+    fw: FramedWrite<WriteHalf<TcpStream>, MessageEncoder>
+}
+
+impl BitcoinNode
+{
+    pub async fn try_connect(ip_addr: IpAddr, port: u16) -> Result<Self, anyhow::Error> {
+
+        // Setup msg version & msg verack
+        let nonce: u64 = rand::random();
+        let start = SystemTime::now();
+        let since_the_epoch = start
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+        println!("{:?}", since_the_epoch);
+        let version = Version::new(ip_addr, port, nonce, since_the_epoch.as_secs() as i64);
+        // println!("version: {:?}", version);
+        let msg_version = Message::from((MessageMagic::Main, MessagePayload::Version(version)));
+        // println!("msg: {:?}", msg);
+        let msg_verack = Message::from((MessageMagic::Main, MessagePayload::Verack));
+
+        let codec_dec = MessageDecoder::new();
+        let codec_enc = MessageEncoder::new();
+
+        let addr = SocketAddr::new(ip_addr, port);
+
+        // Connect
+        let mut socket = TcpStream::connect(addr).await?;
+        let (mut reader, mut writer) = tokio::io::split(socket);
+
+        let mut fr = FramedRead::new(reader, codec_dec);
+        let mut fw = FramedWrite::new(writer, codec_enc);
+
+        let (_, msg_received) = try_join!(
+            send_message2(&mut fw, msg_version),
+            recv_message2(&mut fr)
+        )?;
+
+        println!("msg_received: {:?}", msg_received);
+
+        let (_, msg_received) = try_join!(
+            send_message2(&mut fw, msg_verack),
+            recv_message2(&mut fr)
+        )?;
+
+        println!("msg_received 2: {:?}", msg_received);
+
+        Ok(Self {
+            fr,
+            fw,
+        })
+    }
+
+    pub async fn try_send(&mut self, message: Message) -> Result<(), anyhow::Error> {
+        send_message2(&mut self.fw, message).await
+    }
+
+    pub async fn try_recv(&mut self) -> Result<MessageRaw, anyhow::Error> {
+        recv_message2(&mut self.fr).await
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

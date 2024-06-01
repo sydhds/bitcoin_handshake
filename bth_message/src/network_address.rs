@@ -12,7 +12,7 @@ const IPV4_MAPPED_IPV6_PADDING: [u8; 12] = [
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF,
 ];
 
-/// From https://en.bitcoin.it/wiki/Protocol_documentation#Network_address
+/// From <https://en.bitcoin.it/wiki/Protocol_documentation#Network_address>
 #[derive(Debug, Clone, PartialEq)]
 pub struct NetAddress {
     /// the Time (version >= 31402). Not present in version message.

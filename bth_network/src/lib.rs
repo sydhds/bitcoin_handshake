@@ -1,2 +1,2 @@
-mod codec;
-mod network;
+pub mod codec;
+pub mod network;

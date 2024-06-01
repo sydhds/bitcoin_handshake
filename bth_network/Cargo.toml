@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.38.0", features = ["full"] }
-tokio-util = { version = "0.7.11", features = ["codec"] }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
 bytes = "*"
-bth_message = { path = "../bth_message" }
-anyhow = "1.0.86"
+anyhow = { workspace = true }
 futures = "0.3.30"
+bth_message = { path = "../bth_message" }
+rand = "0.9.0-alpha.1"

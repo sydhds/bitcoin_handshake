@@ -1,7 +1,7 @@
 use crate::serialization::{Deserializer, NomError, Serializer};
 use bytes::{BufMut, BytesMut};
 use nom::bytes::complete::take;
-use nom::number::complete::le_u32;
+use nom::number::complete::{le_u32, le_u64};
 use nom::AsBytes;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use sha2::{Digest, Sha256};
@@ -23,11 +23,15 @@ pub enum MessageMagic {
 pub enum MessageCommand {
     Verack,
     Version,
+    Ping,
+    Pong,
     __Nonexhaustive,
 }
 
 const COMMAND_VERACK: [u8; 12] = [b'v', b'e', b'r', b'a', b'c', b'k', 0, 0, 0, 0, 0, 0];
 const COMMAND_VERSION: [u8; 12] = [b'v', b'e', b'r', b's', b'i', b'o', b'n', 0, 0, 0, 0, 0];
+const COMMAND_PING: [u8; 12] = [b'p', b'i', b'n', b'g', 0, 0, 0, 0, 0, 0, 0, 0];
+const COMMAND_PONG: [u8; 12] = [b'p', b'o', b'n', b'g', 0, 0, 0, 0, 0, 0, 0, 0];
 const COMMAND_OTHER: [u8; 12] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 impl From<&MessageCommand> for [u8; 12] {
@@ -35,6 +39,8 @@ impl From<&MessageCommand> for [u8; 12] {
         match value {
             MessageCommand::Verack => COMMAND_VERACK,
             MessageCommand::Version => COMMAND_VERSION,
+            MessageCommand::Ping => COMMAND_PING,
+            MessageCommand::Pong => COMMAND_PONG,
             MessageCommand::__Nonexhaustive => COMMAND_OTHER,
         }
     }
@@ -44,9 +50,13 @@ impl TryFrom<&[u8; 12]> for MessageCommand {
     type Error = &'static str;
 
     fn try_from(value: &[u8; 12]) -> Result<Self, Self::Error> {
+        
+        // println!("try_from - value: {:?} {:?}", value, String::from_utf8(value.to_vec()));
         Ok(match value {
             v if *v == COMMAND_VERACK => MessageCommand::Verack,
             v if *v == COMMAND_VERSION => MessageCommand::Version,
+            v if *v == COMMAND_PING => MessageCommand::Ping,
+            v if *v == COMMAND_PONG => MessageCommand::Pong,
             _ => MessageCommand::__Nonexhaustive,
         })
     }
@@ -56,35 +66,10 @@ impl TryFrom<&[u8; 12]> for MessageCommand {
 pub enum MessagePayload {
     Verack,
     Version(Version),
+    Ping(u64),
+    Pong(u64),
     __Nonexhaustive,
 }
-
-/*
-impl MessagePayload {
-    fn ser(&self, buffer: &mut Vec<u8>) {
-        match self {
-            MessagePayload::Verack => {
-                // `verack` payload is empty so no need to do anything here
-            }
-            MessagePayload::Version(v) => {
-                // v.ser(buffer);
-                unimplemented!()
-            }
-            _ => {
-                unimplemented!();
-            }
-        }
-    }
-}
-*/
-
-/*
-impl From<&[u8]> for MessagePayload {
-    fn from(value: &[u8]) -> Self {
-        todo!()
-    }
-}
-*/
 
 #[derive(Clone)]
 pub struct MessagePayloadDeserializer {
@@ -117,7 +102,15 @@ impl Deserializer<MessagePayload> for MessagePayloadDeserializer {
             MessageCommand::Version => {
                 let (content, version) = self.version_deserializer.deserialize(buffer)?;
                 Ok((content, MessagePayload::Version(version)))
-            }
+            },
+            MessageCommand::Pong => {
+                let (content, nonce) = le_u64::<_, NomError>(buffer)?;
+                Ok((content, MessagePayload::Pong(nonce)))
+            },
+            MessageCommand::Ping => {
+                let (content, nonce) = le_u64::<_, NomError>(buffer)?;
+                Ok((content, MessagePayload::Ping(nonce)))
+            },
             MessageCommand::__Nonexhaustive => Err("Unknown message command".into()),
         }
     }
@@ -129,7 +122,7 @@ pub struct MessageRaw {
     pub magic: MessageMagic,
     /// ASCII string identifying the packet content, NULL padded (non-NULL padding results in packet rejected)
     pub command: MessageCommand,
-    // Length of payload in number of bytes
+    /// Length of payload in number of bytes
     pub length: u32,
     /// First 4 bytes of sha256(sha256(payload))
     pub checksum: u32,
@@ -138,19 +131,13 @@ pub struct MessageRaw {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-/// From https://en.bitcoin.it/wiki/Protocol_documentation#Message_structure
+/// From <https://en.bitcoin.it/wiki/Protocol_documentation#Message_structure>
 pub struct Message {
     /// Magic value indicating message origin network, and used to seek to next message when stream state is unknown
     pub magic: MessageMagic,
     /// ASCII string identifying the packet content, NULL padded (non-NULL padding results in packet rejected)
-    // command: [u8; 12],
     pub command: MessageCommand,
-    // Length of payload in number of bytes
-    // pub length: Option<u32>,
-    // First 4 bytes of sha256(sha256(payload))
-    // pub checksum: Option<u32>,
     /// The actual data
-    /// payload: Vec<u8>,
     pub payload: MessagePayload,
 }
 
@@ -223,6 +210,25 @@ impl Message {
         }
     }
     */
+}
+
+impl From<(MessageMagic, MessagePayload)> for Message {
+    fn from((magic, payload): (MessageMagic, MessagePayload)) -> Self {
+        
+        let command = match &payload {
+            MessagePayload::Verack => MessageCommand::Verack,
+            MessagePayload::Version(_) => MessageCommand::Version,
+            MessagePayload::Ping(_) => MessageCommand::Ping,
+            MessagePayload::Pong(_) => MessageCommand::Pong,
+            MessagePayload::__Nonexhaustive => MessageCommand::__Nonexhaustive
+        };
+        
+        Self {
+            magic,
+            command,
+            payload,
+        }
+    }
 }
 
 impl TryFrom<(MessageRaw, MessagePayloadDeserializer)> for Message {
@@ -307,6 +313,12 @@ impl Serializer<Message> for MessageSerializer {
                 self.version_serializer
                     .serialize(version, &mut payload_buffer)?;
             }
+            MessagePayload::Ping(nonce) => {
+                payload_buffer.put_u64_le(nonce);
+            },
+            MessagePayload::Pong(nonce) => {
+                payload_buffer.put_u64_le(nonce);
+            },
             MessagePayload::__Nonexhaustive => {}
         };
 
@@ -348,6 +360,7 @@ impl Deserializer<MessageRaw> for MessageDeserializer {
         let (content, command_slice) = take::<_, _, NomError>(12usize)(content)?;
         let command_bytes: &[u8; 12] = command_slice.try_into().unwrap();
         let command = MessageCommand::try_from(command_bytes)?;
+        println!("command: {:?}", command);
 
         let (content, length) = le_u32::<_, NomError>(content)?;
         let (content, checksum) = le_u32::<_, NomError>(content)?;
@@ -373,6 +386,8 @@ impl Deserializer<MessageRaw> for MessageDeserializer {
 
 #[cfg(test)]
 mod tests {
+    use std::net::{IpAddr, Ipv4Addr};
+    use std::time::{SystemTime, UNIX_EPOCH};
     use super::*;
     use nom::AsBytes;
 
@@ -395,6 +410,34 @@ mod tests {
         0x00, 0x00, 0x00, 0x00, // - Payload is 0 bytes long
         0x5D, 0xF6, 0xE0, 0xE2, // - Checksum (internal byte order)
     ];
+    
+    #[test]
+    fn test_dummy() {
+
+        let ip_addr = IpAddr::from(Ipv4Addr::LOCALHOST);
+        let port = 8333;
+        let addr = format!("{}:{}", ip_addr, port);
+
+        // let mut rng = rand::thread_rng();
+        let start = SystemTime::now();
+        let since_the_epoch = start
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+        println!("{:?}", since_the_epoch);
+
+
+        let version = Version::new(ip_addr, port, 0, since_the_epoch.as_secs() as i64);
+        println!("version: {:?}", version);
+    
+        let msg = Message::from((MessageMagic::Main, MessagePayload::Version(version)));
+
+        let ser = MessageSerializer::new();
+        let mut buffer = BytesMut::new();
+        ser.serialize(&msg, &mut buffer).unwrap();
+
+        println!("msg ser: {:?}", buffer.to_vec());
+        println!("msg ser len: {:?}", buffer.len());
+    }
 
     #[test]
     fn test_serialize_verack() {

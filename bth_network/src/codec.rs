@@ -50,15 +50,20 @@ impl Decoder for MessageDecoder {
         // Need magic (4 bytes) + command (12 bytes) + len (4 bytes)
         let index_start_length = 4 + 12;
         let index_end_length = index_start_length + 4;
+        // println!("[dec] {} {}", index_start_length, index_end_length);
         if src.len() < index_end_length {
             // Not enough data to read length marker.
+            // println!("Not enough 1 - return None");
             return Ok(None);
         }
+
+        // println!("[dec] src: {:?} {:?}", src, &src[index_start_length..index_end_length]);
 
         // Read length marker.
         let mut length_bytes = [0u8; 4];
         length_bytes.copy_from_slice(&src[index_start_length..index_end_length]);
         let payload_length = u32::from_le_bytes(length_bytes) as usize;
+        // println!("[Dec] payload len: {}", payload_length);
 
         if payload_length > MAX_PAYLOAD_SIZE {
             return Err(format!("Frame of payload length {} is too large.", payload_length).into());
@@ -67,12 +72,16 @@ impl Decoder for MessageDecoder {
         // let expected_length = 4 + 12 + 4 + 4 + payload_length;
         let expected_length = index_end_length + 4 + payload_length;
 
+        // println!("expected_length: {}", expected_length);
+        
         if src.len() < expected_length {
             src.reserve(expected_length - src.len());
+            // println!("Not enough 2 - return None");
             return Ok(None);
         }
 
         let data = src[..expected_length].to_vec();
+        // println!("[Dec] data: {:?}", data);
         src.advance(expected_length);
 
         let (_content, message_raw) = self
