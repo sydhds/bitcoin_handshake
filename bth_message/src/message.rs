@@ -1,12 +1,13 @@
-use crate::serialization::{Deserializer, NomError, Serializer};
+use std::error::Error;
+
 use bytes::{BufMut, BytesMut};
 use nom::bytes::complete::take;
 use nom::number::complete::{le_u32, le_u64};
 use nom::AsBytes;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use sha2::{Digest, Sha256};
-use std::error::Error;
 
+use crate::serialization::{Deserializer, NomError, Serializer};
 use crate::version::{Version, VersionDeserializer, VersionSerializer};
 
 #[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, TryFromPrimitive)]
@@ -50,8 +51,6 @@ impl TryFrom<&[u8; 12]> for MessageCommand {
     type Error = &'static str;
 
     fn try_from(value: &[u8; 12]) -> Result<Self, Self::Error> {
-        
-        // println!("try_from - value: {:?} {:?}", value, String::from_utf8(value.to_vec()));
         Ok(match value {
             v if *v == COMMAND_VERACK => MessageCommand::Verack,
             v if *v == COMMAND_VERSION => MessageCommand::Version,
@@ -102,15 +101,15 @@ impl Deserializer<MessagePayload> for MessagePayloadDeserializer {
             MessageCommand::Version => {
                 let (content, version) = self.version_deserializer.deserialize(buffer)?;
                 Ok((content, MessagePayload::Version(version)))
-            },
+            }
             MessageCommand::Pong => {
                 let (content, nonce) = le_u64::<_, NomError>(buffer)?;
                 Ok((content, MessagePayload::Pong(nonce)))
-            },
+            }
             MessageCommand::Ping => {
                 let (content, nonce) = le_u64::<_, NomError>(buffer)?;
                 Ok((content, MessagePayload::Ping(nonce)))
-            },
+            }
             MessageCommand::__Nonexhaustive => Err("Unknown message command".into()),
         }
     }
@@ -141,6 +140,17 @@ pub struct Message {
     pub payload: MessagePayload,
 }
 
+/*
+impl Default for Message {
+    fn default() -> Self {
+        Self {
+
+        }
+    }
+}
+*/
+
+/*
 impl Message {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
@@ -211,18 +221,18 @@ impl Message {
     }
     */
 }
+*/
 
 impl From<(MessageMagic, MessagePayload)> for Message {
     fn from((magic, payload): (MessageMagic, MessagePayload)) -> Self {
-        
         let command = match &payload {
             MessagePayload::Verack => MessageCommand::Verack,
             MessagePayload::Version(_) => MessageCommand::Version,
             MessagePayload::Ping(_) => MessageCommand::Ping,
             MessagePayload::Pong(_) => MessageCommand::Pong,
-            MessagePayload::__Nonexhaustive => MessageCommand::__Nonexhaustive
+            MessagePayload::__Nonexhaustive => MessageCommand::__Nonexhaustive,
         };
-        
+
         Self {
             magic,
             command,
@@ -258,23 +268,6 @@ impl TryFrom<(MessageRaw, MessagePayloadDeserializer)> for Message {
         if !rem.is_empty() {
             return Err("Remaining bytes after payload".into());
         }
-
-        /*
-        let payload = {
-            let res = der2.deserialize(value.payload.as_bytes());
-            match res {
-                Ok((rem, payload_)) => {
-                    if !rem.is_empty() {
-                        return Err("Remaining bytes after payload".into());
-                    }
-                    payload_
-                },
-                Err(e) => {
-                    return Err(e.to_string().into())
-                },
-            }
-        };
-        */
 
         let message = Self {
             magic: value.magic,
@@ -315,10 +308,10 @@ impl Serializer<Message> for MessageSerializer {
             }
             MessagePayload::Ping(nonce) => {
                 payload_buffer.put_u64_le(nonce);
-            },
+            }
             MessagePayload::Pong(nonce) => {
                 payload_buffer.put_u64_le(nonce);
-            },
+            }
             MessagePayload::__Nonexhaustive => {}
         };
 
@@ -386,10 +379,10 @@ impl Deserializer<MessageRaw> for MessageDeserializer {
 
 #[cfg(test)]
 mod tests {
-    use std::net::{IpAddr, Ipv4Addr};
-    use std::time::{SystemTime, UNIX_EPOCH};
     use super::*;
     use nom::AsBytes;
+    use std::net::{IpAddr, Ipv4Addr};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     /// From https://en.bitcoin.it/wiki/Protocol_documentation#Message_structure
     const EXPECTED_COMMAND_VERACK: [u8; 12] = [
@@ -410,38 +403,10 @@ mod tests {
         0x00, 0x00, 0x00, 0x00, // - Payload is 0 bytes long
         0x5D, 0xF6, 0xE0, 0xE2, // - Checksum (internal byte order)
     ];
-    
-    #[test]
-    fn test_dummy() {
-
-        let ip_addr = IpAddr::from(Ipv4Addr::LOCALHOST);
-        let port = 8333;
-        let addr = format!("{}:{}", ip_addr, port);
-
-        // let mut rng = rand::thread_rng();
-        let start = SystemTime::now();
-        let since_the_epoch = start
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards");
-        println!("{:?}", since_the_epoch);
-
-
-        let version = Version::new(ip_addr, port, 0, since_the_epoch.as_secs() as i64);
-        println!("version: {:?}", version);
-    
-        let msg = Message::from((MessageMagic::Main, MessagePayload::Version(version)));
-
-        let ser = MessageSerializer::new();
-        let mut buffer = BytesMut::new();
-        ser.serialize(&msg, &mut buffer).unwrap();
-
-        println!("msg ser: {:?}", buffer.to_vec());
-        println!("msg ser len: {:?}", buffer.len());
-    }
 
     #[test]
     fn test_serialize_verack() {
-        let msg_verack = Message::new();
+        let msg_verack = Message::from((MessageMagic::Main, MessagePayload::Verack));
         let ser = MessageSerializer::new();
         let mut buffer = BytesMut::new();
         ser.serialize(&msg_verack, &mut buffer).unwrap();

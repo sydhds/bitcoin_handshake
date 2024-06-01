@@ -29,25 +29,6 @@ pub struct NetAddress {
     pub(crate) port: u16,
 }
 
-/*
-impl NetAddress {
-    pub(crate) fn ser(&self, buffer: &mut Vec<u8>) {
-        buffer.extend(self.services.bits().to_le_bytes());
-        match self.ip {
-            IpAddr::V4(ipv4) => {
-                buffer.extend(IPV4_MAPPED_IPV6_PADDING);
-                buffer.extend(ipv4.octets());
-            }
-            IpAddr::V6(ipv6) => {
-                buffer.extend(ipv6.octets())
-            }
-        }
-        // buffer.extend(self.ip);
-        buffer.extend(self.port.to_be_bytes());
-    }
-}
-*/
-
 pub struct NetAddressSerializer {}
 
 impl Serializer<NetAddress> for NetAddressSerializer {
@@ -83,17 +64,12 @@ impl Deserializer<NetAddress> for NetAddressDeserializer {
         buffer: &'a [u8],
     ) -> Result<(&'a [u8], NetAddress), Box<dyn Error + 'a>> {
         let (content, services_) = le_i64::<&[u8], nom::error::Error<&[u8]>>(buffer)?;
-        // let (content, services_) = take_services(buffer)?;
         let services = Services::from_bits(services_).ok_or("Unknown services")?;
-
         let (content, ip_) = take::<usize, &[u8], nom::error::Error<&[u8]>>(16usize)(content)?;
-
         let ipv6_: &[u8; 16] = ip_.try_into().unwrap();
         let ipv6 = Ipv6Addr::from(*ipv6_);
         let ip = IpAddr::from(ipv6);
-
         let (content, port) = be_u16::<&[u8], nom::error::Error<&[u8]>>(content)?;
-
         Ok((content, NetAddress { services, ip, port }))
     }
 }
@@ -141,9 +117,6 @@ mod tests {
             port: 8333,
         };
 
-        // let mut ser_content = Vec::with_capacity(std::mem::size_of::<NetAddress>());
-        // net_addr_1.ser(&mut ser_content);
-        // assert_eq!(ser_content, EXPECTED);
         let ser = NetAddressSerializer {};
         let mut buffer = BytesMut::new();
         ser.serialize(&net_addr_1, &mut buffer).unwrap();

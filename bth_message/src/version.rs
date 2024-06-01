@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv6Addr};
 
 use bytes::BufMut;
 use nom::bytes::complete::take;
@@ -194,8 +194,8 @@ mod tests {
     use std::str::FromStr;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use nom::AsBytes;
     use bytes::BytesMut;
+    use nom::AsBytes;
 
     // From <https://en.bitcoin.it/wiki/Protocol_documentation#Network_address>
     // Modified: recipient address info & Sender address info
@@ -217,36 +217,6 @@ mod tests {
         0x00, // - relay
     ];
 
-    /*
-    #[test]
-    fn test_dummy() {
-
-        let ip_addr = IpAddr::from(Ipv4Addr::LOCALHOST);
-        let port = 8333;
-        let addr = format!("{}:{}", ip_addr, port);
-
-        // let mut rng = rand::thread_rng();
-        let start = SystemTime::now();
-        let since_the_epoch = start
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards");
-        println!("{:?}", since_the_epoch);
-        
-        
-        let version = Version::new(ip_addr, port, 0, since_the_epoch.as_secs() as i64);
-        println!("version: {:?}", version);
-        
-        let ser = VersionSerializer {
-            addr_serializer: NetAddressSerializer {},
-            var_int_serializer: VarIntSerializer {},
-        };
-        let mut buffer = BytesMut::new();
-        ser.serialize(&version, &mut buffer).unwrap();
-        
-        println!("buffer: {:?} - len: {}", buffer, buffer.len());
-    }
-    */
-    
     #[test]
     fn test_serialize_version() {
         let net_addr_r = NetAddress {

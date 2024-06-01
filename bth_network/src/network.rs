@@ -1,10 +1,9 @@
 use std::net::{IpAddr, SocketAddr};
 use std::time::{SystemTime, UNIX_EPOCH};
+
 use anyhow::anyhow;
-// use bytes::Bytes;
-use futures::{Sink, SinkExt, Stream, StreamExt};
+use futures::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf};
-// use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 use tokio::try_join;
 use tokio_util::codec::{FramedRead, FramedWrite};
@@ -14,25 +13,10 @@ use bth_message::message::{Message, MessageMagic, MessagePayload, MessageRaw};
 use bth_message::version::Version;
 
 /// Receive a Message from network
-pub async fn recv_message<R>(reader: &mut R) -> anyhow::Result<MessageRaw>
+pub async fn recv_message2<R>(fr: &mut FramedRead<R, MessageDecoder>) -> anyhow::Result<MessageRaw>
 where
     R: AsyncRead + Send + Unpin + 'static,
 {
-    let codec = MessageDecoder::new();
-    let mut fr = FramedRead::new(reader, codec);
-    if let Ok(msg_raw) = fr.next().await.ok_or(anyhow!("Cannot read frame"))? {
-        return Ok(msg_raw);
-    }
-
-    Err(anyhow!("Unable to recv msg"))
-}
-
-pub async fn recv_message2<R>(fr: &mut FramedRead<R, MessageDecoder>) -> anyhow::Result<MessageRaw>
-    where
-        R: AsyncRead + Send + Unpin + 'static,
-{
-    // let codec = MessageDecoder::new();
-    // let mut fr = FramedRead::new(reader, codec);
     if let Ok(msg_raw) = fr.next().await.ok_or(anyhow!("Cannot read frame"))? {
         return Ok(msg_raw);
     }
@@ -41,55 +25,32 @@ pub async fn recv_message2<R>(fr: &mut FramedRead<R, MessageDecoder>) -> anyhow:
 }
 
 /// Send a Message through the network
-pub async fn send_message<W>(writer: &mut W, msg: Message) -> anyhow::Result<()>
+pub async fn send_message2<W>(
+    fw: &mut FramedWrite<W, MessageEncoder>,
+    msg: Message,
+) -> anyhow::Result<()>
 where
     W: AsyncWrite + Send + Unpin + 'static,
 {
-    let codec = MessageEncoder::new();
-    let mut fw = FramedWrite::new(writer, codec);
     fw.send(msg).await.map_err(|e| anyhow!(e.to_string()))?;
     Ok(())
 }
 
-pub async fn send_message2<W>(fw: &mut FramedWrite<W, MessageEncoder>, msg: Message) -> anyhow::Result<()>
-    where
-        W: AsyncWrite + Send + Unpin + 'static,
-{
-    fw.send(msg).await.map_err(|e| anyhow!(e.to_string()))?;
-    Ok(())
-}
-
-/*
-pub async fn send_message3(fw: impl Sink<Message, Error=anyhow::Error>, msg: Message) -> anyhow::Result<()> {
-    fw
-        .send(msg)
-        .await
-        .map_err(|e| anyhow!(e.to_string()))?;
-    Ok(())
-}
-*/
-
-pub struct BitcoinNode
-{
+pub struct BitcoinNode {
     fr: FramedRead<ReadHalf<TcpStream>, MessageDecoder>,
-    fw: FramedWrite<WriteHalf<TcpStream>, MessageEncoder>
+    fw: FramedWrite<WriteHalf<TcpStream>, MessageEncoder>,
 }
 
-impl BitcoinNode
-{
+impl BitcoinNode {
     pub async fn try_connect(ip_addr: IpAddr, port: u16) -> Result<Self, anyhow::Error> {
-
         // Setup msg version & msg verack
         let nonce: u64 = rand::random();
         let start = SystemTime::now();
         let since_the_epoch = start
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards");
-        println!("{:?}", since_the_epoch);
         let version = Version::new(ip_addr, port, nonce, since_the_epoch.as_secs() as i64);
-        // println!("version: {:?}", version);
         let msg_version = Message::from((MessageMagic::Main, MessagePayload::Version(version)));
-        // println!("msg: {:?}", msg);
         let msg_verack = Message::from((MessageMagic::Main, MessagePayload::Verack));
 
         let codec_dec = MessageDecoder::new();
@@ -98,30 +59,23 @@ impl BitcoinNode
         let addr = SocketAddr::new(ip_addr, port);
 
         // Connect
-        let mut socket = TcpStream::connect(addr).await?;
-        let (mut reader, mut writer) = tokio::io::split(socket);
+        let socket = TcpStream::connect(addr).await?;
+        let (reader, writer) = tokio::io::split(socket);
 
         let mut fr = FramedRead::new(reader, codec_dec);
         let mut fw = FramedWrite::new(writer, codec_enc);
 
-        let (_, msg_received) = try_join!(
-            send_message2(&mut fw, msg_version),
-            recv_message2(&mut fr)
-        )?;
+        let (_, msg_received) =
+            try_join!(send_message2(&mut fw, msg_version), recv_message2(&mut fr))?;
 
         println!("msg_received: {:?}", msg_received);
 
-        let (_, msg_received) = try_join!(
-            send_message2(&mut fw, msg_verack),
-            recv_message2(&mut fr)
-        )?;
+        let (_, msg_received) =
+            try_join!(send_message2(&mut fw, msg_verack), recv_message2(&mut fr))?;
 
         println!("msg_received 2: {:?}", msg_received);
 
-        Ok(Self {
-            fr,
-            fw,
-        })
+        Ok(Self { fr, fw })
     }
 
     pub async fn try_send(&mut self, message: Message) -> Result<(), anyhow::Error> {
@@ -133,10 +87,10 @@ impl BitcoinNode
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bth_message::message::MessageCommand;
     use tokio::io::AsyncWriteExt;
     use tokio::net::{TcpListener, TcpStream};
 
@@ -155,23 +109,26 @@ mod tests {
                 let (socket, _addr) = listener.accept().await?;
                 socket.writable().await?;
 
-                let (mut reader, mut writer) = socket.into_split();
+                let (reader, writer) = tokio::io::split(socket);
+                let mut fr = FramedRead::new(reader, MessageDecoder::new());
+                let mut fw = FramedWrite::new(writer, MessageEncoder::new());
 
                 tokio::io::stdout()
                     .write_all(b"Server waiting...\n")
                     .await?;
-                let msg = recv_message(&mut reader).await?;
+                let msg_received = recv_message2(&mut fr).await?;
 
                 tokio::io::stdout()
-                    .write_all(format!("Server received: {:?}...\n", msg).as_bytes())
+                    .write_all(format!("Server received: {:?}...\n", msg_received).as_bytes())
                     .await?;
+                assert_eq!(msg_received.command, MessageCommand::Verack);
 
                 tokio::io::stdout()
                     .write_all(b"Server sending message...\n")
                     .await?;
 
-                let msg_to_send = Message::new();
-                send_message(&mut writer, msg_to_send).await?;
+                let msg_to_send = Message::from((MessageMagic::Main, MessagePayload::Verack));
+                send_message2(&mut fw, msg_to_send).await?;
 
                 return Ok::<(), anyhow::Error>(());
             }
@@ -180,21 +137,27 @@ mod tests {
         // dummy client
         let coro2 = tokio::spawn(async move {
             let socket = TcpStream::connect(&addr[..]).await?;
-            let (mut reader, mut writer) = socket.into_split();
+            let (reader, writer) = tokio::io::split(socket);
+            let mut fr = FramedRead::new(reader, MessageDecoder::new());
+            let mut fw = FramedWrite::new(writer, MessageEncoder::new());
 
-            let msg = Message::new();
+            let msg = Message::from((MessageMagic::Main, MessagePayload::Verack));
             tokio::io::stdout()
                 .write_all(b"Client sending msg...\n")
                 .await?;
 
-            send_message(&mut writer, msg).await?;
+            send_message2(&mut fw, msg).await?;
 
             tokio::io::stdout()
                 .write_all(b"Client waiting...\n")
                 .await?;
-            let msg_received = recv_message(&mut reader).await?;
+            let msg_received = recv_message2(&mut fr).await?;
 
-            println!("msg received: {:?}", msg_received);
+            // println!("msg received: {:?}", msg_received);
+            tokio::io::stdout()
+                .write_all(format!("Client - msg received: {:?}", msg_received).as_bytes())
+                .await?;
+            assert_eq!(msg_received.command, MessageCommand::Verack);
 
             tokio::io::stdout()
                 .write_all(format!("Client received: {:?}...\n", msg_received).as_bytes())

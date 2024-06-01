@@ -5,34 +5,6 @@ use nom::number::complete::{le_u16, le_u32, le_u64, u8};
 
 use crate::serialization::{Deserializer, NomError, Serializer};
 
-/*
-// From https://en.bitcoin.it/wiki/Protocol_documentation#Variable_length_string
-pub(crate) fn usize_encode(v: usize) -> Vec<u8> {
-    match v {
-        v if v < 0xFD => { vec![v as u8] },
-        v if v <= 0xFFFF => {
-            let v_ = v as u16;
-            let mut res = vec![0xFD];
-            res.extend(v_.to_le_bytes());
-            res
-        }
-        v if v <= 0xFFFFFFFF => {
-            let v_ = v as u32;
-            let mut res = vec![0xFE];
-            res.extend(v_.to_le_bytes());
-            res
-        }
-        _ => {
-            let v_ = v as u64;
-            println!("v_: {} {:x}", v_, v_);
-            let mut res = vec![0xFF];
-            res.extend(v_.to_le_bytes());
-            res
-        }
-    }
-}
-*/
-
 pub(crate) struct VarIntSerializer {}
 
 impl Serializer<usize> for VarIntSerializer {
@@ -95,9 +67,6 @@ mod tests {
 
     #[test]
     fn test_encode() {
-        // let res = usize_encode(0);
-        // assert_eq!(res, vec![0x0]);
-
         let ser = VarIntSerializer {};
         let mut buffer = BytesMut::new();
 
