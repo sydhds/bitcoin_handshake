@@ -64,23 +64,6 @@ impl Version {
     }
 }
 
-/*
-impl Version {
-    pub(crate) fn ser(&self, buffer: &mut Vec<u8>) {
-        buffer.extend(self.version.to_le_bytes());
-        buffer.extend(self.services.bits().to_le_bytes());
-        buffer.extend(self.timestamp.to_le_bytes());
-        self.addr_recv.ser(buffer);
-        self.addr_from.ser(buffer);
-        buffer.extend(self.nonce.to_le_bytes());
-        buffer.extend(usize_encode(self.user_agent.len()));
-        buffer.extend(self.user_agent.as_bytes());
-        buffer.extend(self.start_height.to_le_bytes());
-        buffer.push(self.relay as u8);
-    }
-}
-*/
-
 pub(crate) struct VersionSerializer {
     addr_serializer: NetAddressSerializer,
     var_int_serializer: VarIntSerializer,
@@ -114,18 +97,6 @@ impl Serializer<Version> for VersionSerializer {
         buffer.put_u8(u8::from(value.relay));
         Ok(())
     }
-
-    // fn size_hint(value: &Version) -> (usize, Option<usize>) {
-
-    //     let size = 4 + 8 + 8 + 1 + 8 + 4 + 8;
-    //     if let (min_size, Some(max_size)) = NetAddressSerializer::size_hint(value.) {
-    //
-    //
-    //
-    //     } else {
-    //         (size, None)
-    //     }
-    // }
 }
 
 #[derive(Clone)]

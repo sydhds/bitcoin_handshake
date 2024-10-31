@@ -28,10 +28,6 @@ impl Serializer<usize> for VarIntSerializer {
 
         Ok(())
     }
-
-    // fn size_hint(_value: &usize) -> (usize, Option<usize>) {
-    //     (1, Some(9))
-    // }
 }
 
 #[derive(Clone)]

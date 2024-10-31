@@ -49,10 +49,6 @@ impl Serializer<NetAddress> for NetAddressSerializer {
         Ok(())
     }
 
-    // fn size_hint(_value: &NetAddress) -> (usize, Option<usize>) {
-    //     let size = 8 + 16 + 2; // i64 services + ip + u16 port
-    //     (size, Some(size))
-    // }
 }
 
 #[derive(Clone)]
