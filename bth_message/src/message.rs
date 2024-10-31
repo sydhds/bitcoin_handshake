@@ -352,8 +352,9 @@ impl Deserializer<MessageRaw> for MessageDeserializer {
 
         let (content, command_slice) = take::<_, _, NomError>(12usize)(content)?;
         let command_bytes: &[u8; 12] = command_slice.try_into().unwrap();
+        // println!("command bytes: {:?}", std::str::from_utf8(command_bytes));
         let command = MessageCommand::try_from(command_bytes)?;
-        println!("command: {:?}", command);
+        // println!("command: {:?}", command);
 
         let (content, length) = le_u32::<_, NomError>(content)?;
         let (content, checksum) = le_u32::<_, NomError>(content)?;
@@ -381,10 +382,8 @@ impl Deserializer<MessageRaw> for MessageDeserializer {
 mod tests {
     use super::*;
     use nom::AsBytes;
-    use std::net::{IpAddr, Ipv4Addr};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
-    /// From https://en.bitcoin.it/wiki/Protocol_documentation#Message_structure
+    // From https://en.bitcoin.it/wiki/Protocol_documentation#Message_structure
     const EXPECTED_COMMAND_VERACK: [u8; 12] = [
         0x76, 0x65, 0x72, 0x61, 0x63, 0x6B, 00, 00, 00, 00, 00, 00, // - "verack" command
     ];

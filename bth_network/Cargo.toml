@@ -10,3 +10,4 @@ anyhow = { workspace = true }
 rand = { workspace = true }
 futures = "0.3.30"
 bth_message = { path = "../bth_message" }
+log = "0.4.21"

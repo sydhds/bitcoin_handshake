@@ -11,6 +11,7 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 use crate::codec::{MessageDecoder, MessageEncoder};
 use bth_message::message::{Message, MessageMagic, MessagePayload, MessageRaw};
 use bth_message::version::Version;
+use log::debug;
 
 /// Receive a Message from network
 pub async fn recv_message2<R>(fr: &mut FramedRead<R, MessageDecoder>) -> anyhow::Result<MessageRaw>
@@ -65,15 +66,17 @@ impl BitcoinNode {
         let mut fr = FramedRead::new(reader, codec_dec);
         let mut fw = FramedWrite::new(writer, codec_enc);
 
+        // Exchange version messages
         let (_, msg_received) =
             try_join!(send_message2(&mut fw, msg_version), recv_message2(&mut fr))?;
 
-        println!("msg_received: {:?}", msg_received);
+        debug!("handshake - msg_received: {:?}", msg_received);
 
+        // Exchange verack messages
         let (_, msg_received) =
             try_join!(send_message2(&mut fw, msg_verack), recv_message2(&mut fr))?;
 
-        println!("msg_received 2: {:?}", msg_received);
+        debug!("verack - msg_received 2: {:?}", msg_received);
 
         Ok(Self { fr, fw })
     }

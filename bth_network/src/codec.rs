@@ -91,7 +91,7 @@ mod tests {
     use super::*;
 
     use std::error::Error;
-    
+
     use bth_message::message::{MessageMagic, MessagePayload, MessagePayloadDeserializer};
 
     #[test]

@@ -9,8 +9,8 @@ tokio-util = { workspace = true }
 anyhow = { workspace = true }
 rand = { workspace = true }
 clap = { version = "4.4", features = ["derive", "cargo"] }
-log = "0.4.21"
-env_logger = "0.11.3"
+log = "0.4.22"
+env_logger = "0.11.5"
 
 bth_message = { path = "../bth_message" }
 bth_network = { path = "../bth_network" }

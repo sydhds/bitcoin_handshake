@@ -8,6 +8,6 @@ use clap::Parser;
 pub struct Cli {
     #[arg(short = 'i', long = "ip", help = "Bitcoin node ip address")]
     pub(crate) ip: IpAddr,
-    #[arg(short = 'p', long = "port", help = "Bitcoin node port number")]
+    #[arg(short = 'p', long = "port", help = "Bitcoin node port number", default_value="8333")]
     pub(crate) port: u16,
 }
